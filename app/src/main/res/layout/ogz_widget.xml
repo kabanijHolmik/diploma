@@ -1,0 +1,53 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/widget_background_color"
+    android:backgroundTint="@color/widget_background_color"
+    android:padding="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="0dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="0dp"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/buttonGoOgz"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/custom_border"
+                android:text="OGZ"
+                android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+                android:textColor="@color/button_text_color" />
+
+            <Button
+                android:id="@+id/buttonGoPgz"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/custom_border"
+                android:text="PGZ"
+                android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+                android:textColor="@color/button_text_color" />
+        </LinearLayout>
+    </LinearLayout>
+</RelativeLayout>

@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">OGZ_PGZ</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="appwidget_text">EXAMPLE</string>
+    <string name="add_widget">Add widget</string>
+    <string name="app_widget_description">This is an app widget description</string>
+    <string name="app_info_title">О приложении</string>
+    <string name="app_info_subtitle">Решение геодезических задач</string>
+    <string name="ogz_title">Обратная геодезическая задача (ОГЗ)</string>
+    <string name="ogz_description">- Входные данные: координаты двух точек в формате 053°55\'51.75\'\'N 027°38\'07.75\'\'E\n- Результат: расстояние между точками, угол поднятия и азимут</string>
+    <string name="pgz_title">Прямая геодезическая задача (ПГЗ)</string>
+    <string name="pgz_description">- Входные данные: координаты исходной точки, азимут и расстояние\n- Результат: координаты искомой точки</string>
+    <string name="coordinates_format">Формат ввода координат</string>
+    <string name="coordinates_description">Координаты вводятся в формате: 053°55\'51.75\'\'N 027°38\'07.75\'\'E\n\nГде:\n- Градусы (°)\n- Минуты (\')\n- Секунды (\'\')\n- Указание полушария (N, S, E, W)</string>
+    <string name="app_usage">Используйте приложение для геодезического сопровождения строительных работ, проектирования, картографии и учебных задач.</string>
+</resources>

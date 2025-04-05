@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    app:startDestination="@id/ogzFragment"
+    android:id="@+id/main_nav_graph">
+
+    <fragment
+        android:id="@+id/ogzFragment"
+        android:name="com.example.ogz_pgz.OgzFragment"
+        android:label="fragment_ogz"
+        tools:layout="@layout/fragment_ogz" >
+        <action
+            android:id="@+id/action_ogzFragment_to_pgzFragment2"
+            app:destination="@id/pgzFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/pgzFragment"
+        android:name="com.example.ogz_pgz.PgzFragment"
+        android:label="fragment_pgz"
+        tools:layout="@layout/fragment_pgz" >
+        <action
+            android:id="@+id/action_pgzFragment_to_ogzFragment2"
+            app:destination="@id/ogzFragment" />
+    </fragment>
+</navigation>

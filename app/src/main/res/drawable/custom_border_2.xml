@@ -1,0 +1,8 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="@color/widget_background_color"/> <!-- Цвет фона -->
+    <stroke
+        android:width="2dp"
+        android:color="@color/button_text_color"/> <!-- Цвет и ширина рамки -->
+</shape>
