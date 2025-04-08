@@ -1,11 +1,15 @@
 package com.example.ogz_pgz
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Bundle
 import android.location.Location
 import android.location.LocationListener
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -15,16 +19,19 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Observer
+import com.example.ogz_pgz.OgzFragment.Companion
 import com.example.ogz_pgz.R
 import com.example.ogz_pgz.model.CoordinateConverter
+import com.example.ogz_pgz.model.VincentyCalculator
 import model.Coordinate
 import model.GeodesicParameters
-import model.PGZCalculator
 
 class PgzFragment : Fragment() {
 
@@ -33,7 +40,11 @@ class PgzFragment : Fragment() {
     }
     private val mapViewModel: MapViewModel by activityViewModels()
 
-    private lateinit var locationManager: LocationManager
+    private val locationManager by lazy {
+        requireActivity().getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    }
+
+    private lateinit var locationListener: LocationListener
 
     private lateinit var editTextPoint: EditText
     private lateinit var editTextDistance: EditText
@@ -75,8 +86,6 @@ class PgzFragment : Fragment() {
 
         setOnClickListeners()
 
-        locationManager = requireActivity().getSystemService(Context.LOCATION_SERVICE) as LocationManager
-
     }
 
     private fun setParams(){
@@ -91,7 +100,7 @@ class PgzFragment : Fragment() {
             textViewResultCoordinate.text.toString()
         )
 
-        mapViewModel.updateMapPoints(CoordinateConverter.parseLatLon(editTextPoint.text.toString()), CoordinateConverter.parseLatLon(textViewResultCoordinate.text.toString().removePrefix("Coordinate: ")))
+        mapViewModel.updateMapPoints(CoordinateConverter.fromDMS(editTextPoint.text.toString()), CoordinateConverter.fromDMS(textViewResultCoordinate.text.toString().removePrefix("Coordinate: ")))
     }
 
     private fun allObserve(){
@@ -106,19 +115,19 @@ class PgzFragment : Fragment() {
         calculateButton.setOnClickListener {
             textViewResultCoordinate.text = "Coordinate:"
 
-            val coordinate = CoordinateConverter.parseCoordinate(editTextPoint.text.toString())
+            val coordinate = CoordinateConverter.fromDMS(editTextPoint.text.toString())
 
             val distance = editTextDistance.text.toString().toDoubleOrNull() ?: 0.0
-            val elevation = CoordinateConverter.parseAngle(editTextElevation.text.toString())
-            val azimuth = CoordinateConverter.parseAngle(editTextAzimuth.text.toString())
+            val elevation = CoordinateConverter.angleDMSToDouble(editTextElevation.text.toString())
+            val azimuth = CoordinateConverter.angleDMSToDouble(editTextAzimuth.text.toString())
 
             val geodesicParameters = GeodesicParameters(distance = distance, azimuth = azimuth, elevationAngle = elevation, distanceIncline = 0.0)
 
-            val resCoordinate = PGZCalculator.calculate(coordinate, geodesicParameters)
+            val resCoordinate = VincentyCalculator().calculatePGZ(coordinate, geodesicParameters)
 
-            val resCoordinateStr = CoordinateConverter.coordinateToString(resCoordinate)
+            val resCoordinateStr = CoordinateConverter.toDMS(resCoordinate)
 
-            val rcParse = CoordinateConverter.parseCoordinate(resCoordinateStr)
+            val rcParse = CoordinateConverter.fromDMS(resCoordinateStr)
 
             pgzViewModel.saveCalculation(coordinate, geodesicParameters, rcParse)
 
@@ -129,7 +138,7 @@ class PgzFragment : Fragment() {
 
         buttonGetCoordinates.setOnClickListener {
             requestLocationPermissionsAndGetLocation()
-            mapViewModel.updatePoint1(CoordinateConverter.parseLatLon(editTextPoint.text.toString()))
+            mapViewModel.updatePoint1(CoordinateConverter.fromDMS(editTextPoint.text.toString()))
         }
     }
 
@@ -169,47 +178,176 @@ class PgzFragment : Fragment() {
 
     private fun getCurrentLocation() {
         try {
-            // Проверяем разрешения еще раз перед запросом локации
+            // Проверяем разрешения еще раз
             if (ActivityCompat.checkSelfPermission(
                     requireContext(),
                     android.Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                ) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
                     requireContext(),
                     android.Manifest.permission.ACCESS_COARSE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                Log.d("PgzFragment", "Нет разрешений на местоположение")
                 return
             }
 
             // Проверяем, включен ли GPS
-            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                // Здесь можно показать диалог с просьбой включить GPS
+            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) &&
+                !locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                Log.d("PgzFragment", "GPS и сетевые провайдеры отключены")
+                showEnableLocationDialog()
                 return
             }
 
-            // Запрашиваем последнее известное местоположение
-            val lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            if (lastKnownLocation != null) {
-                val coordinate = Coordinate(latitude = lastKnownLocation.latitude, longitude = lastKnownLocation.longitude, altitude = 0.0)
-                pgzViewModel.setCoordinate(CoordinateConverter.coordinateToString(coordinate))
+            // Пробуем разные провайдеры для получения последнего известного местоположения
+            var lastLocation: Location? = null
+
+            try {
+                if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    lastLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    Log.d("PgzFragment", "Last GPS location: $lastLocation")
+                }
+            } catch (e: Exception) {
+                Log.e("PgzFragment", "Error getting GPS location: ${e.message}")
             }
 
-            // Запрашиваем актуальное местоположение
-            locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                5000, // минимальное время между обновлениями в мс
-                10f,  // минимальное расстояние между обновлениями в метрах
-                object : LocationListener {
-                    override fun onLocationChanged(location: Location) {
-                        val coordinate = Coordinate(latitude = location.latitude, longitude = location.longitude, altitude = 0.0)
-                        pgzViewModel.setCoordinate(CoordinateConverter.coordinateToString(coordinate))
-                        locationManager.removeUpdates(this)
+            if (lastLocation == null) {
+                try {
+                    if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                        lastLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                        Log.d("PgzFragment", "Last Network location: $lastLocation")
                     }
-
+                } catch (e: Exception) {
+                    Log.e("PgzFragment", "Error getting Network location: ${e.message}")
                 }
-            )
+            }
+
+            if (lastLocation == null) {
+                try {
+                    lastLocation = locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                    Log.d("PgzFragment", "Last Passive location: $lastLocation")
+                } catch (e: Exception) {
+                    Log.e("PgzFragment", "Error getting Passive location: ${e.message}")
+                }
+            }
+
+            // Если есть последнее известное местоположение, используем его
+            if (lastLocation != null) {
+                Log.d("PgzFragment", "Используем последнее известное местоположение: Lat=${lastLocation.latitude}, Lon=${lastLocation.longitude}")
+                val coordinate = Coordinate(
+                    latitude = lastLocation.latitude,
+                    longitude = lastLocation.longitude,
+                    altitude = lastLocation.altitude
+                )
+                pgzViewModel.setCoordinate(CoordinateConverter.toDMS(coordinate))
+            } else {
+                Log.d("PgzFragment", "Нет последнего известного местоположения, ждем обновлений")
+            }
+
+            // Настраиваем слушатель для получения актуальных данных
+            locationListener = object : LocationListener {
+                override fun onLocationChanged(location: Location) {
+                    Log.d("PgzFragment", "Получено обновление местоположения: Lat=${location.latitude}, Lon=${location.longitude}")
+                    val coordinate = Coordinate(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        altitude = location.altitude
+                    )
+                    pgzViewModel.setCoordinate(CoordinateConverter.toDMS(coordinate))
+
+                    // Удаляем слушатель, если больше не нужны обновления
+                    locationManager.removeUpdates(this)
+                }
+
+                override fun onProviderDisabled(provider: String) {
+                    Log.d("PgzFragment", "Провайдер отключен: $provider")
+                }
+
+                override fun onProviderEnabled(provider: String) {
+                    Log.d("PgzFragment", "Провайдер включен: $provider")
+                }
+
+                override fun onStatusChanged(provider: String, status: Int, extras: Bundle) {
+                    Log.d("PgzFragment", "Статус провайдера изменен: $provider, статус: $status")
+                }
+            }
+
+            // Регистрируем слушатель для GPS и сетевого провайдера
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    1000, // 1 секунда
+                    1f,   // 1 метр
+                    locationListener
+                )
+                Log.d("PgzFragment", "Запрошены обновления от GPS")
+            }
+
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    1000,
+                    1f,
+                    locationListener
+                )
+                Log.d("PgzFragment", "Запрошены обновления от сети")
+            }
+
+            // Установка таймаута для получения местоположения
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    locationManager.removeUpdates(locationListener)
+                    Log.d("PgzFragment", "Таймаут получения местоположения")
+                } catch (e: Exception) {
+                    Log.e("PgzFragment", "Ошибка при удалении слушателя: ${e.message}")
+                }
+            }, 30000) // 30 секунд таймаут
+
         } catch (e: Exception) {
-            Log.e("PgzFragment", "Error getting location: ${e.message}")
+            Log.e("PgzFragment", "Общая ошибка получения местоположения: ${e.message}", e)
+        }
+    }
+
+    private fun showEnableLocationDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Включите GPS")
+            .setMessage("Для определения местоположения необходимо включить GPS. Хотите перейти в настройки?")
+            .setPositiveButton("Настройки") { _, _ ->
+                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        try {
+            if (::locationListener.isInitialized) {
+                locationManager.removeUpdates(locationListener)
+            }
+        } catch (e: Exception) {
+            Log.e("PgzFragment", "Error removing location updates: ${e.message}")
+        }
+    }
+
+    // Обработка результата запроса разрешений
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PgzFragment.LOCATION_PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                getCurrentLocation()
+            } else {
+                // Показать информацию о том, что без разрешений функция не работает
+                Toast.makeText(
+                    requireContext(),
+                    "Для работы приложения необходимо разрешение на определение местоположения",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 

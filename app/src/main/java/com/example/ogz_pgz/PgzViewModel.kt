@@ -10,7 +10,7 @@ import model.Coordinate
 import model.GeodesicParameters
 
 class PgzViewModel(private val repository: GeodesicRepository): ViewModel() {
-    private val _coordinate = MutableLiveData<String>("___°__'__.__''N ___°__'__.__''E____._")
+    private val _coordinate = MutableLiveData<String>("__°__'__.__''N __°__'__.__''E____.__")
     val coordinate: LiveData<String>
         get() = _coordinate
 
@@ -22,11 +22,11 @@ class PgzViewModel(private val repository: GeodesicRepository): ViewModel() {
     val distance: LiveData<String>
         get() = _distance
 
-    private val _azimuth = MutableLiveData<String>("___°__'__.__''")
+    private val _azimuth = MutableLiveData<String>("__°__'__.__''")
     val azimuth: LiveData<String>
         get() = _azimuth
 
-    private val _elevation = MutableLiveData<String>("___°__'__.__''")
+    private val _elevation = MutableLiveData<String>("__°__'__.__''")
     val elevation: LiveData<String>
         get() = _elevation
 

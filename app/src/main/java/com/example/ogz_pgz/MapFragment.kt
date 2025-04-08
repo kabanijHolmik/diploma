@@ -1,13 +1,16 @@
 package com.example.ogz_pgz
 
 import android.os.Bundle
+import android.util.Log
+import android.view.GestureDetector
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import com.example.ogz_pgz.R
 import model.Coordinate
 import org.mapsforge.core.graphics.Color
 import org.mapsforge.core.graphics.Style
@@ -18,12 +21,16 @@ import org.mapsforge.map.android.util.AndroidUtil
 import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.overlay.Marker
+import org.mapsforge.map.layer.overlay.Polygon
 import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
 import java.io.File
 import java.io.FileOutputStream
 import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
+import kotlin.math.max
+import kotlin.math.min
+
 
 class MapFragment : Fragment() {
 
@@ -36,6 +43,18 @@ class MapFragment : Fragment() {
     private var marker1: Marker? = null
     private var marker2: Marker? = null
     private var polyline: Polyline? = null
+    private var rectangle: Polygon? = null
+
+    private var isRectangleVisible = true
+
+    private val gestureDetector by lazy {
+        GestureDetector(requireContext(), object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                toggleRectangleVisibility()
+                return
+            }
+        })
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         AndroidGraphicFactory.createInstance(requireActivity().application)
@@ -44,6 +63,11 @@ class MapFragment : Fragment() {
         mapView.isClickable = true
         mapView.mapScaleBar.isVisible = true
         mapView.setBuiltInZoomControls(true)
+
+        mapView.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            false
+        }
 
         val nwCorner = LatLong(56.17, 23.16) // Северо-западный угол Беларуси
         val seCorner = LatLong(51.26, 32.78) // Юго-восточный угол Беларуси
@@ -64,12 +88,14 @@ class MapFragment : Fragment() {
             coordinate ->
             updateMarker1(coordinate)
             updatePolyline()
+            updateRectangle()
         })
 
         viewModel.point2.observe(viewLifecycleOwner, {
                 coordinate ->
             updateMarker2(coordinate)
             updatePolyline()
+            updateRectangle()
         })
     }
 
@@ -142,6 +168,86 @@ class MapFragment : Fragment() {
         mapView.invalidate()
     }
 
+    private fun updateRectangle() {
+        // Удаляем старый прямоугольник
+        rectangle?.let {
+            mapView.layerManager.layers.remove(it)
+            rectangle = null
+        }
+
+        // Если обе точки установлены и прямоугольник должен быть видимым, рисуем новый прямоугольник
+        val point1 = viewModel.point1.value
+        val point2 = viewModel.point2.value
+
+        if (point1 != null && point2 != null && isRectangleVisible) {
+            // Определяем углы прямоугольника
+            val minLat = min(point1.latitude, point2.latitude)
+            val maxLat = max(point1.latitude, point2.latitude)
+            val minLon = min(point1.longitude, point2.longitude)
+            val maxLon = max(point1.longitude, point2.longitude)
+
+            // Создаем координаты для полигона (прямоугольника)
+            val latLongs = ArrayList<LatLong>()
+            latLongs.add(LatLong(minLat, minLon)) // Нижний левый угол
+            latLongs.add(LatLong(minLat, maxLon)) // Нижний правый угол
+            latLongs.add(LatLong(maxLat, maxLon)) // Верхний правый угол
+            latLongs.add(LatLong(maxLat, minLon)) // Верхний левый угол
+            latLongs.add(LatLong(minLat, minLon)) // Замыкаем полигон
+
+            // Создаем стиль заливки с прозрачностью
+            val paintFill = AndroidGraphicFactory.INSTANCE.createPaint()
+            paintFill.color = AndroidGraphicFactory.INSTANCE.createColor(80, 255, 0, 0) // Полупрозрачный красный
+            paintFill.setStyle(Style.FILL)
+
+            // Создаем стиль контура
+            val paintStroke = AndroidGraphicFactory.INSTANCE.createPaint()
+            paintStroke.color = AndroidGraphicFactory.INSTANCE.createColor(Color.RED)
+            paintStroke.strokeWidth = 2 * resources.displayMetrics.density
+            paintStroke.setStyle(Style.STROKE)
+
+            // Создаем полигон
+            rectangle = Polygon(paintFill, paintStroke, AndroidGraphicFactory.INSTANCE)
+            rectangle!!.setPoints(latLongs)
+
+            // Добавляем его под другие слои, чтобы он не закрывал маркеры и линию
+            mapView.layerManager.layers.add(1, rectangle)
+
+            // Вычисляем площадь в квадратных километрах
+            val area = calculateArea(minLat, maxLat, minLon, maxLon)
+            Log.d("MapFragment", "Rectangle area: $area sq km")
+        }
+
+        mapView.invalidate()
+    }
+
+    private fun calculateArea(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double): Double {
+        // Радиус Земли в километрах
+        val earthRadius = 6371.0
+
+        // Перевод координат в радианы
+        val minLatRad = Math.toRadians(minLat)
+        val maxLatRad = Math.toRadians(maxLat)
+        val minLonRad = Math.toRadians(minLon)
+        val maxLonRad = Math.toRadians(maxLon)
+
+        // Вычисление ширины (расстояние по долготе)
+        val width = earthRadius * Math.cos((minLatRad + maxLatRad) / 2) * Math.abs(maxLonRad - minLonRad)
+
+        // Вычисление высоты (расстояние по широте)
+        val height = earthRadius * Math.abs(maxLatRad - minLatRad)
+
+        return width * height
+    }
+
+    // Переключение видимости прямоугольника
+    private fun toggleRectangleVisibility() {
+        isRectangleVisible = !isRectangleVisible
+        updateRectangle()
+
+        // Показываем всплывающее сообщение об изменении состояния
+        val message = if (isRectangleVisible) "Прямоугольник отображается" else "Прямоугольник скрыт"
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+    }
 
     private fun setupMapFile() {
         val mapFile = File(requireContext().filesDir, "belarus.map")
@@ -189,6 +295,7 @@ class MapFragment : Fragment() {
         marker1?.let { mapView.layerManager.layers.remove(it) }
         marker2?.let { mapView.layerManager.layers.remove(it) }
         polyline?.let { mapView.layerManager.layers.remove(it) }
+        rectangle?.let { mapView.layerManager.layers.remove(it) }
 
         tileCache.destroy()
         mapView.destroyAll()

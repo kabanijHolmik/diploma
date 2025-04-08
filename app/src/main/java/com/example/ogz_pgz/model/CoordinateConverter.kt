@@ -1,190 +1,129 @@
 package com.example.ogz_pgz.model
 
 import model.Coordinate
+import java.util.Locale
 
 
 object CoordinateConverter {
-    fun fromDegreeToRad(degrees: Double): Double = degrees * (Math.PI / 180.0)
+    // Паттерн для парсинга строки координат в DMS формате
+    private val DMS_PATTERN = Regex(
+        """(\d+)°(\d+)'(\d+\.\d+)''([NS]) (\d+)°(\d+)'(\d+\.\d+)''([EW])(\d+\.\d+)"""
+    )
 
-    fun fromRadToDegree(rad: Double): Double = rad * 180.0 / Math.PI
+    // Паттерн для парсинга строки координат в десятичном формате
+    // Обновлен для поддержки как точки, так и запятой в качестве разделителя
+    private val DECIMAL_PATTERN = Regex(
+        """([-+]?\d+[.,]\d+)\s*,\s*([-+]?\d+[.,]\d+)(?:\s*,\s*([-+]?\d+[.,]\d+))?"""
+    )
 
-    fun parseCoordinate(input: String): Coordinate {
-        // Заменяем символы подчеркивания на "0".
-        val sanitizedInput = input.replace("_", "0")
+    private val ANGLE_DMS_PATTERN = Regex(
+        """(\d+)°(\d+)'(\d+\.\d+)''"""
+    )
 
-        // Если между широтой и долготой отсутствует пробел, можно разрешить его отсутствие.
-        // Используем \s* вместо \s+.
-        val regex = Regex(
-            """^(\d{3})°(\d{2})'(\d{2}\.\d{2})''N\s*(\d{3})°(\d{2})'(\d{2}\.\d{2})''E(\d{4}\.\d)$"""
+    // Конвертация строки DMS формата в Coordinate
+    fun fromDMS(input: String): Coordinate {
+        val newInput = input.replace('_', '0')
+        val matchResult = DMS_PATTERN.matchEntire(newInput)
+            ?: throw IllegalArgumentException("Неверный формат DMS строки: $input")
+
+        val (latDeg, latMin, latSec, latDir, lonDeg, lonMin, lonSec, lonDir, alt) = matchResult.destructured
+
+        // Вычисление latitude
+        val latitude = latDeg.toDouble() + (latMin.toDouble() / 60) + (latSec.toDouble() / 3600)
+        val adjustedLatitude = if (latDir == "S") -latitude else latitude
+
+        // Вычисление longitude
+        val longitude = lonDeg.toDouble() + (lonMin.toDouble() / 60) + (lonSec.toDouble() / 3600)
+        val adjustedLongitude = if (lonDir == "W") -longitude else longitude
+
+        // Преобразование высоты
+        val altitude = alt.toDouble()
+
+        return Coordinate(
+            latitude = adjustedLatitude,
+            longitude = adjustedLongitude,
+            altitude = altitude
         )
-
-        val matchResult = regex.matchEntire(sanitizedInput)
-            ?: throw IllegalArgumentException("Input does not match the expected format")
-
-        val (degLatStr, minLatStr, secLatStr, degLonStr, minLonStr, secLonStr, altitudeStr) = matchResult.destructured
-
-        val degLat = degLatStr.toDouble()
-        val minLat = minLatStr.toDouble()
-        val secLat = secLatStr.toDouble()
-
-        val degLon = degLonStr.toDouble()
-        val minLon = minLonStr.toDouble()
-        val secLon = secLonStr.toDouble()
-
-        val altitude = altitudeStr.toDouble()
-
-        // Перевод в десятичный формат
-        val latitude = degLat * 3600.0 + minLat * 60.0 + secLat
-        val longitude = degLon * 3600.0 + minLon * 60.0 + secLon
-
-        return Coordinate(latitude = latitude*100, longitude = longitude*100, altitude = altitude)
     }
 
-    fun formatCoordinate(coordinate: Coordinate): String {
-        // Преобразование обратно в секунды (деление на 100, т.к. при парсинге мы умножали на 100)
-        val totalSecondsLat = coordinate.latitude / 100.0
-        val totalSecondsLon = coordinate.longitude / 100.0
+    // Конвертация строки в десятичном формате в Coordinate
+    fun fromDecimal(input: String): Coordinate {
+        val matchResult = DECIMAL_PATTERN.matchEntire(input)
+            ?: throw IllegalArgumentException("Неверный формат десятичной строки: $input")
 
-        // Расчет градусов, минут и секунд для широты
-        val degreesLat = (totalSecondsLat / 3600.0).toInt()
-        val minutesLat = ((totalSecondsLat % 3600.0) / 60.0).toInt()
-        val secondsLat = totalSecondsLat % 60.0
+        val groups = matchResult.groupValues
 
-        // Расчет градусов, минут и секунд для долготы
-        val degreesLon = (totalSecondsLon / 3600.0).toInt()
-        val minutesLon = ((totalSecondsLon % 3600.0) / 60.0).toInt()
-        val secondsLon = totalSecondsLon % 60.0
+        // Преобразуем строки с заменой запятой на точку для корректного парсинга в Double
+        val latitude = groups[1].replace(',', '.').toDouble()
+        val longitude = groups[2].replace(',', '.').toDouble()
 
-        // Форматирование строки с правильным количеством нулей
-        val formattedDegLat = String.format("%03d", degreesLat)
-        val formattedMinLat = String.format("%02d", minutesLat)
-        val formattedSecLat = String.format("%05.2f", secondsLat) // 2 знака после запятой
+        // Если высота не указана, устанавливаем значение по умолчанию 0.0
+        val altitude = if (groups.size > 3 && groups[3].isNotEmpty())
+            groups[3].replace(',', '.').toDouble()
+        else 0.0
 
-        val formattedDegLon = String.format("%03d", degreesLon)
-        val formattedMinLon = String.format("%02d", minutesLon)
-        val formattedSecLon = String.format("%05.2f", secondsLon) // 2 знака после запятой
-
-        val formattedAltitude = String.format("%.1f", coordinate.altitude)
-
-        // Создание конечной строки в формате DDD°MM'SS.SS''N DDD°MM'SS.SS''EDDDD.D
-        return "${formattedDegLat}°${formattedMinLat}'${formattedSecLat}''N " +
-                "${formattedDegLon}°${formattedMinLon}'${formattedSecLon}''E" +
-                formattedAltitude
+        return Coordinate(
+            latitude = latitude,
+            longitude = longitude,
+            altitude = altitude
+        )
     }
 
-    fun parseLatLon(input: String): Coordinate {
-        try {
-            // Предварительная обработка входных данных
-            val cleanInput = input.replace("_", "0").replace(",", ".")
-            val parts = cleanInput.split(" ")
-            if (parts.size != 2) throw IllegalArgumentException("Неверный формат строки координат")
+    // Конвертация Coordinate в строку в DMS формате
+    fun toDMS(coordinate: Coordinate): String {
+        // Работа с latitude
+        val absLat = Math.abs(coordinate.latitude)
+        val latDeg = absLat.toInt()
+        val latMin = ((absLat - latDeg) * 60).toInt()
+        val latSec = ((absLat - latDeg - latMin / 60.0) * 3600)
+        val latDir = if (coordinate.latitude >= 0) "N" else "S"
 
-            // Остальной код остается тем же
-            val latString = parts[0]
-            val lonAltString = parts[1]
+        // Работа с longitude
+        val absLon = Math.abs(coordinate.longitude)
+        val lonDeg = absLon.toInt()
+        val lonMin = ((absLon - lonDeg) * 60).toInt()
+        val lonSec = ((absLon - lonDeg - lonMin / 60.0) * 3600)
+        val lonDir = if (coordinate.longitude >= 0) "E" else "W"
 
-            // Находим индекс 'E' - символ разделяющий долготу и высоту
-            val eIndex = lonAltString.indexOf('E')
-            if (eIndex == -1) throw IllegalArgumentException("Не найден разделитель 'E' между долготой и высотой")
-
-            val lonString = lonAltString.substring(0, eIndex + 1)
-            val altString = lonAltString.substring(eIndex + 1)
-
-            // Парсинг широты
-            val latDeg = latString.substring(0, 3).toInt()
-            val latMin = latString.substring(4, 6).toInt()
-            val latSec = latString.substring(7, 12).toFloat()
-            val latDirection = latString.last()
-
-            // Парсинг долготы
-            val lonDeg = lonString.substring(0, 3).toInt()
-            val lonMin = lonString.substring(4, 6).toInt()
-            val lonSec = lonString.substring(7, 12).toFloat()
-            val lonDirection = lonString.last()
-
-            // Расчет десятичных координат
-            var latitude = latDeg + (latMin / 60.0) + (latSec / 3600.0)
-            if (latDirection == 'S') latitude = -latitude
-
-            var longitude = lonDeg + (lonMin / 60.0) + (lonSec / 3600.0)
-            if (lonDirection == 'W') longitude = -longitude
-
-            // Парсинг высоты
-            val altitude = altString.toDouble()
-
-            return Coordinate(latitude = latitude, longitude = longitude, altitude = altitude)
-        } catch (e: Exception) {
-            throw IllegalArgumentException("Ошибка при разборе строки координат: ${e.message}")
-        }
+        // Форматирование строки с использованием точки в качестве десятичного разделителя
+        return String.format(
+            Locale.US,
+            "%02d°%02d'%06.3f''%s %02d°%02d'%06.3f''%s%06.2f",
+            latDeg, latMin, latSec, latDir,
+            lonDeg, lonMin, lonSec, lonDir,
+            coordinate.altitude
+        )
     }
 
-    fun coordinateToString(coordinate: Coordinate): String {
-        // Обработка широты
-        val lat = coordinate.latitude
-        val latDeg = lat.toInt()
-        val latMinFull = (lat - latDeg) * 60
-        val latMin = latMinFull.toInt()
-        val latSec = (latMinFull - latMin) * 60
-
-        // Обработка долготы
-        val lon = coordinate.longitude
-        val lonDeg = lon.toInt()
-        val lonMinFull = (lon - lonDeg) * 60
-        val lonMin = lonMinFull.toInt()
-        val lonSec = (lonMinFull - lonMin) * 60
-
-        // Форматирование:
-        // - Степени: 3 цифры с лидирующими нулями (%03d)
-        // - Минуты: 2 цифры с лидирующими нулями (%02d)
-        // - Секунды: 2 целых цифры и 2 цифры после запятой, общий формат "%05.2f"
-        // - Высота: 3 цифры для целой части и 1 знак после запятой, формат "%05.1f" (например, "000.0")
-        val latStr = String.format("%03d°%02d'%05.2f''N", latDeg, latMin, latSec)
-        val lonStr = String.format("%03d°%02d'%05.2f''E", lonDeg, lonMin, lonSec)
-        val altStr = String.format("%06.1f", coordinate.altitude)
-
-        // Результирующая строка с разделяющим пробелом между широтой и долготой и сразу после долготы идёт значение высоты.
-        return "$latStr $lonStr$altStr"
+    // Конвертация Coordinate в строку в десятичном формате
+    fun toDecimal(coordinate: Coordinate): String {
+        // Используем Locale.US для гарантии использования точки в качестве десятичного разделителя
+        return String.format(
+            Locale.US,
+            "%.14f, %.14f, %.2f",
+            coordinate.latitude,
+            coordinate.longitude,
+            coordinate.altitude
+        )
     }
 
-    fun parseAngle(input: String): Double {
-        val sanitizedInput = input.replace("_", "0")
-        // Регулярное выражение для формата азимута:
-        // - degrees: одна или более цифр
-        // - минуты: одна или более цифр
-        // - секунды: цифры с плавающей точкой (например, "19.83")
-        val regex = Regex("""^(\d{1,3})°(\d{1,2})'(\d{1,2}\.\d+)''$""")
-        val matchResult = regex.matchEntire(sanitizedInput)
-            ?: throw IllegalArgumentException("Input does not match the azimuth format")
+    fun doubleToAngleDMS(angle: Double): String {
+        val absAngle = Math.abs(angle)
+        val degrees = absAngle.toInt()
+        val minutes = ((absAngle - degrees) * 60).toInt()
+        val seconds = ((absAngle - degrees - minutes / 60.0) * 3600)
 
-        val (degStr, minStr, secStr) = matchResult.destructured
-
-        val degrees = degStr.toDouble()
-        val minutes = minStr.toDouble()
-        val seconds = secStr.toDouble()
-
-        // Перевод в десятичный формат:
-        // d.ddd = degrees + minutes/60 + seconds/3600
-        return degrees + minutes / 60.0 + seconds / 3600.0
+        return String.format(Locale.US, "%02d°%02d'%06.3f''", degrees, minutes, seconds)
     }
 
-    /**
-     * Преобразует десятичный градус азимута в строку формата "ddd°mm'ss.ss''".
-     */
-    fun angleToDms(azimuth: Double): String {
+    // Конвертация строки формата XX°XX'XX.XXX'' в Double
+    fun angleDMSToDouble(angleDMS: String): Double {
+        val newAngleDMS = angleDMS.replace('_', '0')
+        val matchResult = ANGLE_DMS_PATTERN.matchEntire(newAngleDMS)
+            ?: throw IllegalArgumentException("Неверный формат угла DMS: $angleDMS")
 
-        // Определяем целую часть (градусы)
-        val degrees = azimuth.toInt()
-        // Находим оставшуюся дробную часть и преобразуем её в минуты
-        val minutesFull = (azimuth - degrees) * 60.0
-        val minutes = minutesFull.toInt()
-        // Оставшуюся дробь переводим в секунды
-        val seconds = (minutesFull - minutes) * 60.0
+        val (degrees, minutes, seconds) = matchResult.destructured
 
-        // Форматируем так, чтобы:
-        // - градусы — 3 знака с ведущими нулями,
-        // - минуты — 2 знака,
-        // - секунды — 2 целых цифры и 2 цифры после запятой (например, "19.83").
-        return String.format("%03d°%02d'%05.2f''", degrees, minutes, seconds)
+        return degrees.toDouble() + (minutes.toDouble() / 60) + (seconds.toDouble() / 3600)
     }
-
 }

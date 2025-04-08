@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_TAB_INDEX = "EXTRA_TAB_INDEX"
 
         fun setupMask(editText: EditText) {
-            val template = "___°__'__.__''N ___°__'__.__''E____._"
+            val template = "__°__'__.__''N __°__'__.__''E____.__"
             // Устанавливаем шаблон и курсор на первый символ '_'
             editText.setText(template)
             editText.setSelection(template.indexOf('_'))

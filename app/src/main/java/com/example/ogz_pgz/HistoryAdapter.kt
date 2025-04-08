@@ -38,14 +38,14 @@ class HistoryAdapter(private val context: Context) : RecyclerView.Adapter<Histor
         holder.textViewOperationName.text = currentItem.calculation.calculationType
 
         // Форматирование координат
-        holder.textViewCoordinate1.text = CoordinateConverter.formatCoordinate(currentItem.coordinate1.toDomain())
-        holder.textViewCoordinate2.text = CoordinateConverter.formatCoordinate(currentItem.coordinate2.toDomain())
+        holder.textViewCoordinate1.text = CoordinateConverter.toDMS(currentItem.coordinate1.toDomain())
+        holder.textViewCoordinate2.text = CoordinateConverter.toDMS(currentItem.coordinate2.toDomain())
 
         // Установка параметров
         holder.textViewDistanceTopoHistory.text = "Distance topo, m: ${formatDouble(currentItem.parameters.distance)}"
-        holder.textViewElevationAngleHistory.text = "Elevation angle, °: ${CoordinateConverter.angleToDms(currentItem.parameters.elevationAngle)}"
+        holder.textViewElevationAngleHistory.text = "Elevation angle, °: ${CoordinateConverter.doubleToAngleDMS(currentItem.parameters.elevationAngle)}"
         holder.textViewDistanceLongHistory.text = "Distance long, m: ${formatDouble(currentItem.parameters.distanceIncline)}"
-        holder.textViewAzimuthHistory.text = "Azimuth, °: ${CoordinateConverter.angleToDms(currentItem.parameters.azimuth)}"
+        holder.textViewAzimuthHistory.text = "Azimuth, °: ${CoordinateConverter.doubleToAngleDMS(currentItem.parameters.azimuth)}"
     }
 
     override fun getItemCount(): Int {

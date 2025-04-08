@@ -12,11 +12,11 @@ import model.GeodesicParameters
 
 class OgzViewModel(private val repository: GeodesicRepository): ViewModel() {
 
-    private val _coordinate1 = MutableLiveData<String>("___°__'__.__''N ___°__'__.__''E____._")
+    private val _coordinate1 = MutableLiveData<String>("__°__'__.__''N __°__'__.__''E____.__")
     val coordinate1: LiveData<String>
         get() = _coordinate1
 
-    private val _coordinate2 = MutableLiveData<String>("___°__'__.__''N ___°__'__.__''E____._")
+    private val _coordinate2 = MutableLiveData<String>("__°__'__.__''N __°__'__.__''E____.__")
     val coordinate2: LiveData<String>
         get() = _coordinate2
 
